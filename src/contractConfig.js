@@ -1,6 +1,6 @@
 // src/contractConfig.js
 
-export const CONTRACT_ADDRESS = "0xaa078351c3963bbb6d5800d7868544250afdd65f"; // <-- Вставьте адрес вашего контракта сюда
+export const CONTRACT_ADDRESS = "0xB43992dcf27B7fBbE23F6B575FB0868d2E65EB4d"; // <-- Вставьте адрес вашего контракта сюда
 
 export const CONTRACT_ABI = [
     // Вставьте ваш ABI сюда.
