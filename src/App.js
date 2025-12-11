@@ -11,7 +11,7 @@ const MOVES = {
 };
 const MOVE_NAMES = ['Камень', 'Бумага', 'Ножницы'];
 
-function App() { // <-- ОТКРЫТИЕ ФУНКЦИИ App
+function App() {
     const [currentAccount, setCurrentAccount] = useState(null); // Адрес подключенного пользователя
     const [provider, setProvider] = useState(null); // Объект провайдера (для чтения)
     const [signer, setSigner] = useState(null); // Объект подписывающего (для записи транзакций)
@@ -30,7 +30,7 @@ function App() { // <-- ОТКРЫТИЕ ФУНКЦИИ App
 
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-            // ИСПРАВЛЕНИЕ #1: Возвращаем стандартный синтаксис BrowserProvider
+            // Шаг 1: Создаем провайдер (стандартный синтаксис Ethers v6)
             const newProvider = new ethers.BrowserProvider(window.ethereum);
             const newSigner = await newProvider.getSigner();
 
@@ -38,12 +38,12 @@ function App() { // <-- ОТКРЫТИЕ ФУНКЦИИ App
             setProvider(newProvider);
             setSigner(newSigner);
 
-            // ИСПРАВЛЕНИЕ #2: Отключаем ENS на уровне контракта (четвертый аргумент)
+            // ИСПРАВЛЕНИЕ: Отключаем ENS на уровне контракта для записи
             const rpsContract = new ethers.Contract(
                 CONTRACT_ADDRESS, 
                 CONTRACT_ABI, 
                 newSigner, 
-                { ens: {} } // <--- ЯВНО ОТКЛЮЧАЕМ ENS
+                { ens: {} } // <--- Отключение ENS
             );
             setContract(rpsContract);
 
@@ -77,7 +77,6 @@ function App() { // <-- ОТКРЫТИЕ ФУНКЦИИ App
             await transaction.wait();
 
             setMessage('Игра успешно сыграна! Ожидайте результата в истории.');
-            // После успешной транзакции обновляем историю
             await fetchGameHistory();
 
         } catch (error) {
@@ -98,12 +97,12 @@ function App() { // <-- ОТКРЫТИЕ ФУНКЦИИ App
         if (!provider || !currentAccount) return; 
 
         try {
-            // ИСПРАВЛЕНИЕ #3: Отключаем ENS и для readOnlyContract
+            // ИСПРАВЛЕНИЕ: Отключаем ENS и для readOnlyContract
             const readOnlyContract = new ethers.Contract(
                 CONTRACT_ADDRESS, 
                 CONTRACT_ABI, 
                 provider, 
-                { ens: {} } // <--- ЯВНО ОТКЛЮЧАЕМ ENS
+                { ens: {} } // <--- Отключение ENS
             );
             
             // Вызываем функцию истории 
@@ -116,7 +115,7 @@ function App() { // <-- ОТКРЫТИЕ ФУНКЦИИ App
                 timestamp: Number(game.timestamp),
             }));
             
-            setHistory(formattedHistory.reverse()); // Показываем свежие игры в начале
+            setHistory(formattedHistory.reverse()); 
             setMessage(prev => prev.includes('Успешно') ? prev : 'История обновлена.');
             
         } catch (error) {
@@ -232,6 +231,6 @@ function App() { // <-- ОТКРЫТИЕ ФУНКЦИИ App
         </div>
     );
 
-} // <-- ЗДЕСЬ ПРАВИЛЬНО ЗАКРЫВАЕТСЯ ФУНКЦИЯ App
+} 
 
 export default App;
