@@ -12,13 +12,13 @@ const MOVES = {
 const MOVE_NAMES = ['Камень', 'Бумага', 'Ножницы'];
 
 function App() {
-    const [currentAccount, setCurrentAccount] = useState(null); // Адрес подключенного пользователя
-    const [provider, setProvider] = useState(null); // Объект провайдера (для чтения)
-    const [signer, setSigner] = useState(null); // Объект подписывающего (для записи транзакций)
-    const [contract, setContract] = useState(null); // Объект контракта
-    const [loading, setLoading] = useState(false); // Для отслеживания загрузки
-    const [message, setMessage] = useState(''); // Сообщения для пользователя (ошибки/успех)
-    const [history, setHistory] = useState([]); // История игр
+    const [currentAccount, setCurrentAccount] = useState(null); 
+    const [provider, setProvider] = useState(null); 
+    const [signer, setSigner] = useState(null); 
+    const [contract, setContract] = useState(null); 
+    const [loading, setLoading] = useState(false); 
+    const [message, setMessage] = useState(''); 
+    const [history, setHistory] = useState([]); 
 
     // 1. Функция подключения к кошельку
     const connectWallet = async () => {
@@ -30,20 +30,31 @@ function App() {
 
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-            // Шаг 1: Создаем провайдер (стандартный синтаксис Ethers v6)
-            const newProvider = new ethers.BrowserProvider(window.ethereum);
+            // 1. Создаем стандартный провайдер
+            const baseProvider = new ethers.BrowserProvider(window.ethereum);
+
+            // ***************************************************************
+            // АГРЕССИВНОЕ ИСПРАВЛЕНИЕ ENS-ОШИБКИ ДЛЯ НЕ-ETH СЕТЕЙ
+            // ***************************************************************
+            // Переопределяем метод getResolver, чтобы он всегда возвращал null. 
+            // Это обманывает Ethers.js, заставляя его думать, что ENS не поддерживается.
+            const PatchedProvider = baseProvider;
+            PatchedProvider.getResolver = async () => null; 
+            
+            const newProvider = PatchedProvider;
+            // ***************************************************************
+            
             const newSigner = await newProvider.getSigner();
 
             setCurrentAccount(accounts[0]);
             setProvider(newProvider);
             setSigner(newSigner);
 
-            // ИСПРАВЛЕНИЕ: Отключаем ENS на уровне контракта для записи
+            // Создаем контракт для записи (signer)
             const rpsContract = new ethers.Contract(
                 CONTRACT_ADDRESS, 
                 CONTRACT_ABI, 
-                newSigner, 
-                { ens: {} } // <--- Отключение ENS
+                newSigner
             );
             setContract(rpsContract);
 
@@ -70,10 +81,7 @@ function App() {
         setMessage(`Отправка хода "${MOVE_NAMES[move]}"...`);
 
         try {
-            // Вызываем функцию play в смарт-контракте
             const transaction = await contract.play(move);
-
-            // Ждем завершения транзакции в блокчейне
             await transaction.wait();
 
             setMessage('Игра успешно сыграна! Ожидайте результата в истории.');
@@ -97,18 +105,16 @@ function App() {
         if (!provider || !currentAccount) return; 
 
         try {
-            // ИСПРАВЛЕНИЕ: Отключаем ENS и для readOnlyContract
+            // Создаем контракт для чтения (provider)
+            // Здесь ENS уже должен быть отключен на уровне провайдера (PatchedProvider)
             const readOnlyContract = new ethers.Contract(
                 CONTRACT_ADDRESS, 
                 CONTRACT_ABI, 
-                provider, 
-                { ens: {} } // <--- Отключение ENS
+                provider
             );
             
-            // Вызываем функцию истории 
             const rawHistory = await readOnlyContract.getGameHistory(currentAccount);
 
-            // Преобразование данных
             const formattedHistory = rawHistory.map(game => ({
                 move: Number(game.playerMove), 
                 result: game.result, 
