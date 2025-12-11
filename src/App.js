@@ -11,7 +11,7 @@ const MOVES = {
 };
 const MOVE_NAMES = ['Камень', 'Бумага', 'Ножницы'];
 
-function App() {
+function App() { // <-- ОТКРЫТИЕ ФУНКЦИИ App
   const [currentAccount, setCurrentAccount] = useState(null); // Адрес подключенного пользователя
   const [provider, setProvider] = useState(null); // Объект провайдера (для чтения)
   const [signer, setSigner] = useState(null); // Объект подписывающего (для записи транзакций)
@@ -33,6 +33,7 @@ function App() {
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
 
       // Настраиваем объекты ethers.js
+      // Для современной версии ethers.js (v6) используется BrowserProvider
       const newProvider = new ethers.BrowserProvider(window.ethereum);
       const newSigner = await newProvider.getSigner();
 
@@ -47,12 +48,15 @@ function App() {
       setMessage(`Успешно подключено: ${accounts[0].substring(0, 6)}...${accounts[0].slice(-4)}`);
     } catch (error) {
       console.error(error);
-      setMessage(`Ошибка подключения: ${error.message || error}`);
+      // Улучшенная обработка для отклоненной пользователем транзакции
+      if (error.code === 4001) {
+        setMessage('Подключение отклонено пользователем.');
+      } else {
+        setMessage(`Ошибка подключения: ${error.message || error}`);
+      }
     }
   };
-}
-  // ... остальная часть компонента
-  // src/App.js (Продолжение)
+
 
   // 2. Функция вызова play()
   const handlePlay = async (move) => {
@@ -72,82 +76,96 @@ function App() {
       await transaction.wait();
 
       setMessage('Игра успешно сыграна! Ожидайте результата в истории.');
-      // После успешной транзакции можно обновить историю
+      // После успешной транзакции обновляем историю
       await fetchGameHistory();
 
     } catch (error) {
       console.error('Ошибка при вызове play:', error);
-      // Обработка ошибок, например, если пользователь отклонил транзакцию
-      setMessage(`Ошибка транзакции: ${error.reason || error.message || 'Неизвестная ошибка'}`);
+      // Обработка ошибки, если пользователь отклонил транзакцию (очень важно)
+       if (error.code === 4001) {
+        setMessage('Транзакция отклонена пользователем.');
+      } else {
+        setMessage(`Ошибка транзакции: ${error.reason || error.message || 'Неизвестная ошибка'}`);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // ...
-
-  // src/App.js (Продолжение)
 
   // 3. Функция получения истории игр
   const fetchGameHistory = async () => {
-    // ВАЖНО: для чтения истории контракту не нужен signer, но нужен provider, 
-    // или можно использовать контракт, созданный ранее.
-    if (!contract || !currentAccount) return;
+    // Используем provider, чтобы избежать ошибок "signer not found"
+    if (!provider || !currentAccount) return; 
 
     try {
-      // Создаем контракт для чтения (используем provider, если signer не нужен)
+      // Создаем контракт для чтения (нужен provider)
       const readOnlyContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
       
-      // Вызываем функцию истории (ВАЖНО: замените "getGameHistory" на ваше название функции)
-      // В контракте история, скорее всего, хранится в виде массива структур.
+      // Вызываем функцию истории 
       const rawHistory = await readOnlyContract.getGameHistory(currentAccount);
 
-      // В зависимости от того, что возвращает ваш контракт, вам может понадобиться 
-      // преобразовать данные (например, из BigNumber в обычные числа).
-      // Здесь предполагается, что он возвращает массив объектов с полями move, result и т.д.
+      // Преобразование данных
       const formattedHistory = rawHistory.map(game => ({
-        move: Number(game.playerMove), // Пример преобразования из BigNumber
-        result: game.result, // Пример поля результата
-        timestamp: Number(game.timestamp), // Пример временной метки
+        // Преобразуем BigInt (или BigNumber) в обычное число
+        move: Number(game.playerMove), 
+        result: game.result, 
+        timestamp: Number(game.timestamp),
       }));
       
       setHistory(formattedHistory.reverse()); // Показываем свежие игры в начале
+      setMessage(prev => prev.includes('Успешно') ? prev : 'История обновлена.');
+      
     } catch (error) {
       console.error('Ошибка при получении истории:', error);
-      setMessage(`Ошибка загрузки истории: ${error.message}`);
+      // Это может быть связано с тем, что функция getGameHistory не существует или имеет другой аргумент
+      setMessage(`Ошибка загрузки истории: Проверьте ABI и название функции getGameHistory. ${error.message}`);
     }
   };
 
   // Обновляем историю при подключении или смене аккаунта
   useEffect(() => {
+    // Включаем подписку на смену аккаунта/сети для EXTRA задачи
+    if (window.ethereum) {
+        const handleAccountOrChainChange = () => window.location.reload(); 
+        window.ethereum.on('accountsChanged', handleAccountOrChainChange);
+        window.ethereum.on('chainChanged', handleAccountOrChainChange);
+        return () => {
+            window.ethereum.removeListener('accountsChanged', handleAccountOrChainChange);
+            window.ethereum.removeListener('chainChanged', handleAccountOrChainChange);
+        };
+    }
+    
+    // Загружаем историю, если подключен аккаунт
     if (currentAccount && provider) {
       fetchGameHistory();
     }
   }, [currentAccount, provider]); 
 
-  // ...
 
-  // src/App.js (Финальный return)
-
+  // **********************************************
+  // ФИНАЛЬНАЯ РАЗМЕТКА (JSX)
+  // **********************************************
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
       <h1>🎮 Камень-Ножницы-Бумага на Блокчейне</h1>
 
       {/* Кнопка подключения */}
       {!currentAccount ? (
-        <button onClick={connectWallet} style={{ padding: '10px 20px', fontSize: '16px' }}>
+        <button onClick={connectWallet} style={{ padding: '10px 20px', fontSize: '16px', cursor: loading ? 'not-allowed' : 'pointer' }}>
           Подключить MetaMask
         </button>
       ) : (
-        <p>✅ Подключен: 
-           **{currentAccount.substring(0, 6)}...{currentAccount.slice(-4)}** <button onClick={() => fetchGameHistory()} style={{ marginLeft: '10px' }}>
-             Обновить историю
-           </button>
+        <p>
+          ✅ Подключен: 
+          **{currentAccount.substring(0, 6)}...{currentAccount.slice(-4)}** <button onClick={fetchGameHistory} style={{ marginLeft: '10px', padding: '5px 10px' }}>
+            Обновить историю
+          </button>
         </p>
       )}
 
       {/* Сообщения */}
-      {message && <p style={{ color: message.includes('Ошибка') ? 'red' : 'green', fontWeight: 'bold' }}>{message}</p>}
+      {message && <p style={{ color: message.includes('Ошибка') || message.includes('отклонена') ? 'red' : 'green', fontWeight: 'bold' }}>{message}</p>}
 
       <hr />
 
@@ -166,14 +184,16 @@ function App() {
                   padding: '10px 15px',
                   fontSize: '18px',
                   cursor: loading ? 'not-allowed' : 'pointer',
-                  backgroundColor: key === 'ROCK' ? '#ddd' : key === 'PAPER' ? '#bbb' : '#999',
+                  backgroundColor: key === 'ROCK' ? '#e0e0e0' : key === 'PAPER' ? '#c0c0c0' : '#a0a0a0',
+                  border: 'none',
+                  borderRadius: '5px'
                 }}
               >
                 {MOVE_NAMES[MOVES[key]]}
               </button>
             ))}
           </div>
-          {loading && <p>Ожидание подтверждения транзакции...</p>}
+          {loading && <p>⌛ Ожидание подтверждения транзакции...</p>}
         </section>
       )}
 
@@ -193,18 +213,25 @@ function App() {
                 border: '1px solid #ccc', 
                 padding: '10px', 
                 marginBottom: '5px',
-                backgroundColor: index % 2 === 0 ? '#f9f9f9' : '#fff'
+                borderRadius: '5px',
+                backgroundColor: index % 2 === 0 ? '#f9f9f9' : '#fff',
+                display: 'flex',
+                justifyContent: 'space-between'
               }}
             >
-              **Ход:** {MOVE_NAMES[game.move]} | **Результат:** {game.result} 
-              {/* Если в вашем контракте есть результат (Win/Lose/Draw) */}
-              {game.timestamp && ` | **Время:** ${new Date(game.timestamp * 1000).toLocaleString()}`}
+              <div>
+                 **Ход:** {MOVE_NAMES[game.move]} | **Результат:** {game.result} 
+              </div>
+              {game.timestamp && <div style={{ fontSize: '12px', color: '#666' }}>
+                **Время:** {new Date(game.timestamp * 1000).toLocaleString()}
+              </div>}
             </li>
           ))}
         </ul>
       </section>
     </div>
   );
-}
+
+} // <-- ЗДЕСЬ ПРАВИЛЬНО ЗАКРЫВАЕТСЯ ФУНКЦИЯ App
 
 export default App;
