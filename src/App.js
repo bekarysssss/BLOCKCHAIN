@@ -1,7 +1,7 @@
 // src/App.js
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from './contractConfig'; // Импортируем конфиг
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from './contractConfig'; 
 
 // Настройка ходов (для удобства)
 const MOVES = {
@@ -10,6 +10,9 @@ const MOVES = {
     SCISSORS: 2,
 };
 const MOVE_NAMES = ['Камень', 'Бумага', 'Ножницы'];
+
+// Укажем Chain ID для BNB Testnet (97)
+const BNB_TESTNET_CHAIN_ID = 97;
 
 function App() {
     const [currentAccount, setCurrentAccount] = useState(null); 
@@ -28,21 +31,15 @@ function App() {
                 return;
             }
 
+            // Запрашиваем аккаунты
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-            // 1. Создаем стандартный провайдер
-            const baseProvider = new ethers.BrowserProvider(window.ethereum);
-
             // ***************************************************************
-            // АГРЕССИВНОЕ ИСПРАВЛЕНИЕ ENS-ОШИБКИ ДЛЯ НЕ-ETH СЕТЕЙ
+            // АГРЕССИВНОЕ ИСПРАВЛЕНИЕ #2: Явно указываем Chain ID для провайдера
             // ***************************************************************
-            // Переопределяем метод getResolver, чтобы он всегда возвращал null. 
-            // Это обманывает Ethers.js, заставляя его думать, что ENS не поддерживается.
-            const PatchedProvider = baseProvider;
-            PatchedProvider.getResolver = async () => null; 
-            
-            const newProvider = PatchedProvider;
-            // ***************************************************************
+            // Это помогает Ethers.js пропустить ненужные запросы к ENS, 
+            // так как он знает, что это не сеть Ethereum L1.
+            const newProvider = new ethers.BrowserProvider(window.ethereum, BNB_TESTNET_CHAIN_ID);
             
             const newSigner = await newProvider.getSigner();
 
@@ -51,10 +48,11 @@ function App() {
             setSigner(newSigner);
 
             // Создаем контракт для записи (signer)
+            // Здесь ENS уже должен быть отключен на уровне провайдера
             const rpsContract = new ethers.Contract(
                 CONTRACT_ADDRESS, 
                 CONTRACT_ABI, 
-                newSigner
+                newSigner 
             );
             setContract(rpsContract);
 
@@ -105,8 +103,7 @@ function App() {
         if (!provider || !currentAccount) return; 
 
         try {
-            // Создаем контракт для чтения (provider)
-            // Здесь ENS уже должен быть отключен на уровне провайдера (PatchedProvider)
+            // Контракт для чтения (provider)
             const readOnlyContract = new ethers.Contract(
                 CONTRACT_ADDRESS, 
                 CONTRACT_ABI, 
