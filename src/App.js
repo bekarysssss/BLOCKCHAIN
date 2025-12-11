@@ -11,7 +11,6 @@ const MOVES = {
 };
 const MOVE_NAMES = ['Камень', 'Бумага', 'Ножницы'];
 
-// Укажем Chain ID для BNB Testnet (97)
 const BNB_TESTNET_CHAIN_ID = 97;
 
 function App() {
@@ -31,14 +30,9 @@ function App() {
                 return;
             }
 
-            // Запрашиваем аккаунты
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-            // ***************************************************************
-            // АГРЕССИВНОЕ ИСПРАВЛЕНИЕ #2: Явно указываем Chain ID для провайдера
-            // ***************************************************************
-            // Это помогает Ethers.js пропустить ненужные запросы к ENS, 
-            // так как он знает, что это не сеть Ethereum L1.
+            // Явно указываем Chain ID для BrowserProvider, чтобы избежать проблем с ENS
             const newProvider = new ethers.BrowserProvider(window.ethereum, BNB_TESTNET_CHAIN_ID);
             
             const newSigner = await newProvider.getSigner();
@@ -47,10 +41,9 @@ function App() {
             setProvider(newProvider);
             setSigner(newSigner);
 
-            // Создаем контракт для записи (signer)
-            // Здесь ENS уже должен быть отключен на уровне провайдера
+            // ИСПРАВЛЕНИЕ: Нормализуем адрес контракта с помощью ethers.getAddress()
             const rpsContract = new ethers.Contract(
-                CONTRACT_ADDRESS, 
+                ethers.getAddress(CONTRACT_ADDRESS), // <--- НОРМАЛИЗАЦИЯ
                 CONTRACT_ABI, 
                 newSigner 
             );
@@ -103,9 +96,9 @@ function App() {
         if (!provider || !currentAccount) return; 
 
         try {
-            // Контракт для чтения (provider)
+            // ИСПРАВЛЕНИЕ: Нормализуем адрес контракта с помощью ethers.getAddress()
             const readOnlyContract = new ethers.Contract(
-                CONTRACT_ADDRESS, 
+                ethers.getAddress(CONTRACT_ADDRESS), // <--- НОРМАЛИЗАЦИЯ
                 CONTRACT_ABI, 
                 provider
             );
