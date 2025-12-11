@@ -11,6 +11,7 @@ const MOVES = {
 };
 const MOVE_NAMES = ['Камень', 'Бумага', 'Ножницы'];
 
+// Использование Chain ID 97 для BNB Testnet
 const BNB_TESTNET_CHAIN_ID = 97;
 
 function App() {
@@ -32,8 +33,16 @@ function App() {
 
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-            // Явно указываем Chain ID для BrowserProvider, чтобы избежать проблем с ENS
-            const newProvider = new ethers.BrowserProvider(window.ethereum, BNB_TESTNET_CHAIN_ID);
+            // 1. Создаем провайдер, явно указывая Chain ID
+            // Это должно предотвратить поиск ENS для других сетей.
+            const baseProvider = new ethers.BrowserProvider(window.ethereum, BNB_TESTNET_CHAIN_ID);
+
+            // 2. Добавляем ПАТЧ: Принудительно отключаем getResolver, чтобы Ethers.js не искал ENS
+            // Это самая агрессивная и надежная мера.
+            const PatchedProvider = baseProvider;
+            PatchedProvider.getResolver = async () => null; 
+            
+            const newProvider = PatchedProvider;
             
             const newSigner = await newProvider.getSigner();
 
@@ -41,9 +50,12 @@ function App() {
             setProvider(newProvider);
             setSigner(newSigner);
 
-            // ИСПРАВЛЕНИЕ: Нормализуем адрес контракта с помощью ethers.getAddress()
+            // 3. НОРМАЛИЗАЦИЯ: Оборачиваем адрес контракта в ethers.getAddress()
+            // Это предотвращает попытку Ethers.js разрешить его как ENS-имя.
+            const contractAddressNormalized = ethers.getAddress(CONTRACT_ADDRESS);
+
             const rpsContract = new ethers.Contract(
-                ethers.getAddress(CONTRACT_ADDRESS), // <--- НОРМАЛИЗАЦИЯ
+                contractAddressNormalized, // <--- ИСПОЛЬЗУЕМ НОРМАЛИЗОВАННЫЙ АДРЕС
                 CONTRACT_ABI, 
                 newSigner 
             );
@@ -72,7 +84,8 @@ function App() {
         setMessage(`Отправка хода "${MOVE_NAMES[move]}"...`);
 
         try {
-            const transaction = await contract.play(move);
+            // contract.play() теперь использует контракт, созданный с нормализованным адресом
+            const transaction = await contract.play(move); 
             await transaction.wait();
 
             setMessage('Игра успешно сыграна! Ожидайте результата в истории.');
@@ -96,9 +109,11 @@ function App() {
         if (!provider || !currentAccount) return; 
 
         try {
-            // ИСПРАВЛЕНИЕ: Нормализуем адрес контракта с помощью ethers.getAddress()
+            // НОРМАЛИЗАЦИЯ: Оборачиваем адрес контракта в ethers.getAddress()
+            const contractAddressNormalized = ethers.getAddress(CONTRACT_ADDRESS);
+
             const readOnlyContract = new ethers.Contract(
-                ethers.getAddress(CONTRACT_ADDRESS), // <--- НОРМАЛИЗАЦИЯ
+                contractAddressNormalized, // <--- ИСПОЛЬЗУЕМ НОРМАЛИЗОВАННЫЙ АДРЕС
                 CONTRACT_ABI, 
                 provider
             );
